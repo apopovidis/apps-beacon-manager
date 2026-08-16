@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Beacon Manager</title>
+<style>
+  :root{
+    --ink:#0b1210; --surface:#0f1a16; --surface2:#132420; --border:#1f3a32;
+    --text:#eef7f2; --muted:#9fb8ad; --accent:#7be6b0; --bad:#e67b7b;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --status-good:#0ca30c; --status-warning:#fab219; --status-critical:#d03b3b;
+  }
+  @media(prefers-color-scheme:light){
+    :root{ --ink:#f7fbf9; --surface:#ffffff; --surface2:#f0f5f2; --border:#dbe6e0; --text:#0f1a16; --muted:#516a5f;
+      --status-good:#0ca30c; --status-warning:#fab219; --status-critical:#d03b3b;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ink);color:var(--text);font:14px/1.5 Inter,system-ui,-apple-system,sans-serif;}
+  button,input,select{font:inherit;color:inherit}
+  input,select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 10px;width:100%}
+  button{background:var(--accent);color:#08130f;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text);font-weight:600}
+  button.small{padding:5px 10px;font-size:.78rem}
+  .wrap{max-width:1100px;margin:0 auto;padding:32px 28px 80px}
+  .brand{font-weight:800;font-size:1.3rem;letter-spacing:-.01em;margin-bottom:4px}
+  .brand span{color:var(--accent)}
+  .sub{color:var(--muted);font-size:.85rem;margin-bottom:28px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:20px}
+  .card h2{margin:0 0 4px;font-size:1.05rem}
+  .card .hint{color:var(--muted);font-size:.82rem;margin-bottom:14px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  table{width:100%;border-collapse:collapse;font-size:.84rem}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:.68rem}
+  tr:last-child td{border-bottom:none}
+  code{font-family:var(--mono);background:var(--surface2);padding:2px 6px;border-radius:5px;font-size:.85em}
+  .badge{display:inline-block;font-size:.68rem;text-transform:uppercase;font-weight:700;padding:3px 9px;border-radius:99px;border:1px solid var(--border)}
+  .badge.healthy{color:var(--status-good);border-color:var(--status-good)}
+  .badge.unreachable{color:var(--status-critical);border-color:var(--status-critical)}
+  .badge.unknown{color:var(--muted)}
+  .badge.shared{color:var(--accent);border-color:var(--accent)}
+  .badge.dedicated{color:var(--status-warning);border-color:var(--status-warning)}
+  .muted{color:var(--muted)}
+  .empty{color:var(--muted);font-size:.85rem;padding:16px 0;text-align:center}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  #gate{position:fixed;inset:0;background:var(--ink);display:flex;align-items:center;justify-content:center;z-index:10}
+  #gate .box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:340px}
+  .hidden{display:none !important}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:30;padding:20px}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;width:600px;max-width:100%;max-height:85vh;overflow:auto}
+  .modal h2{margin:0 0 4px}
+  .platform-row{display:grid;grid-template-columns:1.2fr 1fr 120px auto;gap:8px;margin-bottom:8px;align-items:center}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+  .snippet-block{margin-bottom:16px}
+  .snippet-block .platform-name{font-weight:700;margin-bottom:6px}
+  .snippet-block pre{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:.76rem;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:0 0 6px}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="box">
+    <div class="brand">Beacon Manager</div>
+    <p class="sub">Enter the manager admin key.</p>
+    <input id="adminKeyInput" type="password" placeholder="Admin key">
+    <div style="height:10px"></div>
+    <button id="adminKeySubmit" style="width:100%">Continue</button>
+  </div>
+</div>
+
+<div class="hidden" id="app">
+  <div class="wrap">
+    <div class="brand">Beacon Manager<span>.</span></div>
+    <div class="sub">Central registry for every Beacon installation</div>
+
+    <div class="card">
+      <h2>Instances</h2>
+      <div class="hint">Every Beacon deployment this Manager knows about and can reach.</div>
+      <div id="instancesTable"></div>
+      <div style="height:14px"></div>
+      <form id="registerInstanceForm">
+        <div class="grid2">
+          <input id="instName" placeholder="Instance name (e.g. Shared prod)">
+          <input id="instOrigin" placeholder="Origin URL (e.g. http://localhost:4101)">
+        </div>
+        <div style="height:8px"></div>
+        <div class="grid2">
+          <select id="instKind">
+            <option value="shared">Shared</option>
+            <option value="dedicated">Dedicated</option>
+          </select>
+          <input id="instBootstrapKey" type="password" placeholder="Bootstrap admin key (used once, never stored)">
+        </div>
+        <div style="height:10px"></div>
+        <button type="submit">Register instance</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <h2 style="margin:0">Products</h2>
+          <div class="hint" style="margin:0">Every product across every registered instance.</div>
+        </div>
+        <button type="button" id="newProductBtn" class="small">+ New product</button>
+      </div>
+      <div style="height:14px"></div>
+      <div id="productsTable"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="productModalBackdrop">
+  <div class="modal" id="productModal"></div>
+</div>
+
+<script>
+const state = { adminKey: localStorage.getItem("manager_admin_key") || "", instances: [], products: [] };
+
+function api(path, opts) {
+  return fetch(path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", "x-admin-key": state.adminKey, ...(opts && opts.headers) },
+  }).then(async (r) => {
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+    return r.json();
+  });
+}
+
+function esc(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+function showApp() {
+  document.getElementById("gate").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  loadAll();
+}
+
+document.getElementById("adminKeySubmit").onclick = async () => {
+  const key = document.getElementById("adminKeyInput").value.trim();
+  if (!key) return;
+  state.adminKey = key;
+  try {
+    await fetch("/admin/instances", { headers: { "x-admin-key": key } }).then((r) => {
+      if (!r.ok) throw new Error("Invalid admin key.");
+    });
+    localStorage.setItem("manager_admin_key", key);
+    showApp();
+  } catch (e) {
+    alert(e.message);
+  }
+};
+
+if (state.adminKey) showApp();
+
+async function loadAll() {
+  [state.instances, state.products] = await Promise.all([api("/admin/instances"), api("/admin/products")]);
+  renderInstances();
+  renderProducts();
+}
+
+function renderInstances() {
+  const el = document.getElementById("instancesTable");
+  if (!state.instances.length) { el.innerHTML = `<div class="empty">No instances registered yet.</div>`; return; }
+  el.innerHTML = `
+    <table><thead><tr><th>Name</th><th>Kind</th><th>Origin</th><th>Status</th><th>Last checked</th><th></th></tr></thead>
+    <tbody>${state.instances.map((i) => `
+      <tr>
+        <td>${esc(i.name)}</td>
+        <td><span class="badge ${i.kind}">${i.kind}</span></td>
+        <td><code>${esc(i.origin_url)}</code></td>
+        <td><span class="badge ${i.status}">${i.status}</span></td>
+        <td class="muted">${i.last_checked_at ? new Date(i.last_checked_at).toLocaleString() : "—"}</td>
+        <td class="row">
+          <button type="button" class="ghost small" data-check="${i.id}">Check</button>
+          <button type="button" class="ghost small" data-sync="${i.id}">Sync products</button>
+          <button type="button" class="ghost small" data-remove="${i.id}">Remove</button>
+        </td>
+      </tr>
+    `).join("")}</tbody></table>
+  `;
+  el.querySelectorAll("[data-check]").forEach((btn) => btn.onclick = async () => {
+    await api(`/admin/instances/${btn.dataset.check}/check`, { method: "POST" });
+    await loadAll();
+  });
+  el.querySelectorAll("[data-sync]").forEach((btn) => btn.onclick = async () => {
+    try {
+      const result = await api(`/admin/instances/${btn.dataset.sync}/sync-products`, { method: "POST" });
+      alert(`Synced ${result.synced} product(s) from this instance.`);
+      await loadAll();
+    } catch (e) { alert("Sync failed: " + (e.message || e)); }
+  });
+  el.querySelectorAll("[data-remove]").forEach((btn) => btn.onclick = async () => {
+    const inst = state.instances.find((i) => i.id === btn.dataset.remove);
+    if (!confirm(`Remove "${inst.name}" from Manager? Its products stay on the instance, just untracked here.`)) return;
+    await api(`/admin/instances/${btn.dataset.remove}`, { method: "DELETE" });
+    await loadAll();
+  });
+}
+
+function renderProducts() {
+  const el = document.getElementById("productsTable");
+  if (!state.products.length) { el.innerHTML = `<div class="empty">No products tracked yet.</div>`; return; }
+  el.innerHTML = `
+    <table><thead><tr><th>Product</th><th>Instance</th><th>Projects</th><th></th></tr></thead>
+    <tbody>${state.products.map((p) => `
+      <tr>
+        <td>${esc(p.name)}</td>
+        <td>${esc(p.instance_name)} <span class="badge ${p.instance_status}" style="margin-left:4px">${p.instance_status}</span></td>
+        <td>${p.reachable ? p.projectCount : `<span class="muted">unreachable</span>`}</td>
+        <td><button type="button" class="ghost small" data-access="${p.id}">Embed access</button></td>
+      </tr>
+    `).join("")}</tbody></table>
+  `;
+  el.querySelectorAll("[data-access]").forEach((btn) => btn.onclick = () => openEmbedAccessModal(btn.dataset.access));
+}
+
+// --- Embed access modal: agency logins for the product-scoped /beacon UI --
+
+async function openEmbedAccessModal(productId) {
+  const product = state.products.find((p) => p.id === productId);
+  const backdrop = document.getElementById("productModalBackdrop");
+  const modal = document.getElementById("productModal");
+  modal.innerHTML = `<h2>Embed access — ${esc(product.name)}</h2><p class="muted">Loading&hellip;</p>`;
+  backdrop.classList.remove("hidden");
+
+  const creds = await api(`/admin/products/${productId}/embed-credentials`);
+  modal.innerHTML = `
+    <h2>Embed access — ${esc(product.name)}</h2>
+    <p class="muted" style="margin-bottom:14px">Logins for the scoped <code>/beacon</code> dashboard — each can see only this product's projects, nothing else.</p>
+    <div id="credList">${creds.length ? `
+      <table><thead><tr><th>Username</th><th>Created</th><th></th></tr></thead>
+      <tbody>${creds.map((c) => `
+        <tr>
+          <td>${esc(c.username)}</td>
+          <td class="muted">${new Date(c.created_at).toLocaleDateString()}</td>
+          <td><button type="button" class="ghost small" data-revoke="${c.id}">Revoke</button></td>
+        </tr>
+      `).join("")}</tbody></table>
+    ` : `<div class="empty">No embed logins yet.</div>`}</div>
+    <div style="height:14px"></div>
+    <form id="newCredForm">
+      <div class="grid2">
+        <input id="credUsername" placeholder="Username">
+        <input id="credPassword" type="password" placeholder="Password (min 8 chars)">
+      </div>
+      <div style="height:10px"></div>
+      <button type="submit" class="small">+ Create login</button>
+    </form>
+    <div class="modal-actions"><button type="button" class="ghost" id="accessDone">Close</button></div>
+  `;
+  modal.querySelectorAll("[data-revoke]").forEach((btn) => btn.onclick = async () => {
+    await api(`/admin/embed-credentials/${btn.dataset.revoke}`, { method: "DELETE" });
+    openEmbedAccessModal(productId);
+  });
+  modal.querySelector("#newCredForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const username = modal.querySelector("#credUsername").value.trim();
+    const password = modal.querySelector("#credPassword").value;
+    if (!username || !password) return alert("Username and password are required.");
+    try {
+      await api(`/admin/products/${productId}/embed-credentials`, { method: "POST", body: JSON.stringify({ username, password }) });
+      openEmbedAccessModal(productId);
+    } catch (e2) {
+      alert("Couldn't create login: " + (e2.message || e2));
+    }
+  };
+  modal.querySelector("#accessDone").onclick = () => backdrop.classList.add("hidden");
+}
+
+// --- New Product modal ---------------------------------------------------
+
+const PLATFORM_OPTIONS = [
+  { value: "web", label: "Web" },
+  { value: "ios", label: "iOS" },
+  { value: "android", label: "Android" },
+  { value: "server", label: "Server" },
+  { value: "other", label: "Other" },
+];
+
+function slugify(text) {
+  return text.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function platformRowHtml(index) {
+  return `
+    <div class="platform-row" data-row="${index}">
+      <input class="platform-name" placeholder="Surface name (e.g. Web app)">
+      <input class="platform-slug" placeholder="slug">
+      <select class="platform-kind">
+        ${PLATFORM_OPTIONS.map((o) => `<option value="${o.value}">${o.label}</option>`).join("")}
+      </select>
+      <button type="button" class="ghost small platform-remove" title="Remove">&times;</button>
+    </div>
+  `;
+}
+
+function wirePlatformRow(row) {
+  const nameInput = row.querySelector(".platform-name");
+  const slugInput = row.querySelector(".platform-slug");
+  nameInput.addEventListener("input", () => {
+    if (!slugInput.dataset.touched) slugInput.value = slugify(nameInput.value);
+  });
+  slugInput.addEventListener("input", () => { slugInput.dataset.touched = "1"; });
+  row.querySelector(".platform-remove").onclick = () => {
+    if (row.parentElement.children.length > 1) row.remove();
+  };
+}
+
+document.getElementById("newProductBtn").onclick = () => {
+  if (!state.instances.length) return alert("Register an instance first.");
+  const backdrop = document.getElementById("productModalBackdrop");
+  const modal = document.getElementById("productModal");
+  modal.innerHTML = `
+    <h2>New product</h2>
+    <p class="muted" style="margin-bottom:14px">Creates a product on the instance you choose, plus one project per platform.</p>
+    <select id="productInstance" style="margin-bottom:10px">
+      ${state.instances.map((i) => `<option value="${i.id}">${esc(i.name)} (${esc(i.origin_url)})</option>`).join("")}
+    </select>
+    <input id="productName" placeholder="Product name (e.g. Acme Marketing Site)" style="margin-bottom:14px">
+    <div id="platformRows"></div>
+    <button type="button" class="ghost small" id="addPlatformRow">+ Add platform</button>
+    <div class="modal-actions">
+      <button type="button" class="ghost" id="productCancel">Cancel</button>
+      <button type="button" id="productSubmit">Create product</button>
+    </div>
+  `;
+  const rows = modal.querySelector("#platformRows");
+  rows.innerHTML = platformRowHtml(0);
+  wirePlatformRow(rows.querySelector('[data-row="0"]'));
+  modal.querySelector("#addPlatformRow").onclick = () => {
+    rows.insertAdjacentHTML("beforeend", platformRowHtml(rows.children.length));
+    wirePlatformRow(rows.lastElementChild);
+  };
+  modal.querySelector("#productCancel").onclick = () => backdrop.classList.add("hidden");
+  modal.querySelector("#productSubmit").onclick = submitNewProduct;
+  backdrop.classList.remove("hidden");
+};
+
+function sdkSnippet(project, platform, originUrl) {
+  if (platform === "web") {
+    return `import { init } from "@autopilot/analytics-sdk/browser";\n\nconst beacon = init({\n  apiKey: "${project.api_key}",\n  source: "web",\n  ingestUrl: "${originUrl}",\n});`;
+  }
+  if (platform === "ios" || platform === "android") {
+    return `import { init } from "@autopilot/analytics-sdk/react-native";\n\nconst beacon = init({\n  apiKey: "${project.api_key}",\n  source: "${platform}",\n  ingestUrl: "${originUrl}",\n});`;
+  }
+  if (platform === "server") {
+    return `import { init } from "@autopilot/analytics-sdk/node";\n\nconst beacon = init({\n  apiKey: "${project.api_key}",\n  source: "server",\n  ingestUrl: "${originUrl}",\n});`;
+  }
+  return `# Python\nfrom beacon_analytics import init\nbeacon = init("${project.api_key}", "other", ingest_url="${originUrl}")`;
+}
+
+async function submitNewProduct() {
+  const modal = document.getElementById("productModal");
+  const instanceId = modal.querySelector("#productInstance").value;
+  const instance = state.instances.find((i) => i.id === instanceId);
+  const name = modal.querySelector("#productName").value.trim();
+  if (!name) return alert("Product name is required.");
+  const platforms = Array.from(modal.querySelectorAll(".platform-row")).map((row) => ({
+    name: row.querySelector(".platform-name").value.trim(),
+    slug: row.querySelector(".platform-slug").value.trim(),
+    platform: row.querySelector(".platform-kind").value,
+  }));
+  if (platforms.some((p) => !p.name || !p.slug)) return alert("Every platform needs a name and a slug.");
+
+  try {
+    const result = await api("/admin/products", { method: "POST", body: JSON.stringify({ instanceId, name, platforms }) });
+    renderProductResults(result, instance.origin_url);
+    await loadAll();
+  } catch (e) {
+    alert("Couldn't create product: " + (e.message || e));
+  }
+}
+
+function renderProductResults(result, originUrl) {
+  const modal = document.getElementById("productModal");
+  modal.innerHTML = `
+    <h2>${esc(result.group.name)} is ready</h2>
+    <p class="muted" style="margin-bottom:14px">Paste the matching snippet into each surface's codebase to start sending events.</p>
+    <div id="snippetList"></div>
+    <div class="modal-actions"><button type="button" id="productDone">Done</button></div>
+  `;
+  const list = modal.querySelector("#snippetList");
+  result.projects.forEach((project) => {
+    const platform = project.platform || "web";
+    const block = document.createElement("div");
+    block.className = "snippet-block";
+    block.innerHTML = `
+      <div class="platform-name">${esc(project.name)} <span class="muted" style="font-weight:400">(${esc(project.slug)})</span></div>
+      <pre>${esc(sdkSnippet(project, platform, originUrl))}</pre>
+      <button type="button" class="ghost small" data-copy>Copy</button>
+    `;
+    block.querySelector("[data-copy]").onclick = (e) => {
+      navigator.clipboard.writeText(sdkSnippet(project, platform, originUrl));
+      e.target.textContent = "Copied!";
+      setTimeout(() => { e.target.textContent = "Copy"; }, 1500);
+    };
+    list.appendChild(block);
+  });
+  modal.querySelector("#productDone").onclick = () => document.getElementById("productModalBackdrop").classList.add("hidden");
+}
+
+document.getElementById("registerInstanceForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const name = document.getElementById("instName").value.trim();
+  const originUrl = document.getElementById("instOrigin").value.trim();
+  const kind = document.getElementById("instKind").value;
+  const bootstrapAdminKey = document.getElementById("instBootstrapKey").value.trim();
+  if (!name || !originUrl || !bootstrapAdminKey) return alert("Name, origin URL, and bootstrap admin key are all required.");
+  try {
+    await api("/admin/instances", { method: "POST", body: JSON.stringify({ name, originUrl, kind, bootstrapAdminKey }) });
+    document.getElementById("registerInstanceForm").reset();
+    await loadAll();
+  } catch (e2) {
+    alert("Couldn't register instance: " + (e2.message || e2));
+  }
+};
+</script>
+</body>
+</html>

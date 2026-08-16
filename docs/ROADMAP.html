@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Beacon Manager — Roadmap</title>
+<style>
+  :root{
+    --ink:#0b1210; --surface:#0f1a16; --surface2:#132420; --border:#1f3a32;
+    --text:#eef7f2; --muted:#9fb8ad; --accent:#7be6b0; --now:#e6c95a;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media(prefers-color-scheme:light){
+    :root{ --ink:#f7fbf9; --surface:#ffffff; --surface2:#f0f5f2; --border:#dbe6e0; --text:#0f1a16; --muted:#516a5f; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ink);color:var(--text);font:16px/1.6 Inter,system-ui,-apple-system,sans-serif;}
+  .wrap{max-width:980px;margin:0 auto;padding:56px 28px 120px}
+  .kicker{color:var(--accent);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.78rem}
+  h1{font-size:clamp(2rem,5vw,3rem);line-height:1.05;letter-spacing:-.02em;margin:14px 0 6px}
+  .subtitle{color:var(--muted);font-size:1.1rem;max-width:640px;margin:0 0 36px}
+  h2{font-size:1.5rem;margin:56px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+  p{margin:0 0 14px}
+  code{font-family:var(--mono);background:var(--surface2);padding:2px 6px;border-radius:5px;font-size:.88em}
+  a{color:var(--accent)}
+  .phase{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px 24px;margin:16px 0}
+  .phase-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+  .badge{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;padding:4px 10px;border-radius:99px;border:1px solid var(--border)}
+  .badge.now{color:var(--now);border-color:var(--now)}
+  .badge.status{color:var(--muted)}
+  ul{margin:8px 0 0;padding-left:20px}
+  li{margin:4px 0}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.92rem}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase}
+  footer{margin-top:80px;color:var(--muted);font-size:.82rem;border-top:1px solid var(--border);padding-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">Roadmap</div>
+  <h1>Beacon Manager Roadmap</h1>
+  <p class="subtitle">Phase B of Beacon's multi-product architecture — see the sibling <code>apps-analytics-sdk</code> repo's ROADMAP.html Phase 17 for Phase A (product modeling on the shared instance) and the discussion that shaped this whole roadmap.</p>
+
+  <h2>Phase 1 — Registry + control plane v1</h2>
+  <p>Proves the core mechanism end to end: register a real Beacon instance, mint a scoped credential, create and track products on it, all from one place — before any dedicated-instance provisioning or migration complexity gets added.</p>
+  <div class="phase">
+    <div class="phase-head"><span class="badge now">Now</span><span class="badge status">Phase 1</span></div>
+    <ul>
+      <li><strong>Instance registry</strong> — register, health-check, and remove Beacon deployments. Registration mints a scoped, revocable <code>auth_provider='manager'</code> credential on the target instance rather than storing its master key; removal best-effort revokes that credential remotely and always forgets the instance locally.</li>
+      <li><strong>Cross-instance products</strong> — create a product directly on a chosen instance (one call, same UX as Beacon's own "New Product" flow), or adopt products that already exist on an instance via sync. The products view fans out live to each instance's real admin API — no cached/duplicated analytics data.</li>
+      <li><strong>Proxied key rotation</strong> from Manager's own dashboard.</li>
+      <li><strong>13 automated integration tests</strong> against a hermetic fake-Beacon HTTP stub (registration, wrong-bootstrap-key rejection, duplicate-origin rejection, health check up/down, revoke-on-remove including the unreachable-instance case, sync-adopts-only-product-kind-groups, create-product, proxied rotation, unreachable-product reporting).</li>
+      <li><strong>Verified live against a real running Beacon instance</strong> (not just the fake stub): registered it, confirmed the scoped <code>admin_users</code> row actually appeared in Beacon's own database with the right role/auth_provider, created a real product through Manager and confirmed the resulting project group + project rows exist in Beacon's real database, then removed the instance and confirmed the scoped credential was actually deleted on the Beacon side — not just forgotten locally.</li>
+    </ul>
+  </div>
+
+  <h2>Phase 2 — Embeddable, product-scoped <code>/beacon</code> UI</h2>
+  <p>The agency use case: an outside agency manages one client's site and needs its own login into just that product's analytics, from that product's own domain — without touching Manager or any other product. Deliberately architected so the real dashboard and the real security boundary both live once, on Manager, and what a web app installs at its own <code>/beacon</code> is a thin pointer (an iframe) to it — the same pattern most embeddable analytics/support widgets use, and it avoids retrofitting scoping into Beacon's own ~80-route admin API.</p>
+  <div class="phase">
+    <div class="phase-head"><span class="badge now">Now</span><span class="badge status">Phase 2</span></div>
+    <ul>
+      <li><strong>Product-scoped logins</strong> — <code>product_access_credentials</code> (username + scrypt-hashed password, no new dependency) and <code>embed_sessions</code> (opaque 12h token). Completely separate identity from Manager's own admin key and from any Beacon instance credential — this identity can only ever reach one product.</li>
+      <li><strong>The real security boundary is server-side, on Manager</strong> — <code>/public/embed/*</code> re-fetches that session's product's live project list from its Beacon instance and checks the requested project id against it on <em>every single request</em>, not once at login. A session's own product is never cached or client-supplied.</li>
+      <li><strong>The hosted dashboard</strong> — <code>GET /embed/:productId</code>, a real login-gated page (project list, summary, recent events, 30-day web analytics) served by Manager itself.</li>
+      <li><strong><code>embed-snippet/beacon.html</code></strong> — the actual file a web app drops at its own <code>/beacon</code> route; a one-line iframe pointer, works on any stack (static hosting, Express, Next.js — see its README), no backend logic to run.</li>
+      <li><strong>Manager UI</strong> — "Embed access" per product: create/list/revoke agency logins.</li>
+      <li><strong>25 automated integration tests</strong> (up from 13, +12): login success/wrong-password/cross-product-login-rejected, missing/garbage/expired session tokens, scoped project list, scoped summary/events/web-analytics, credential revoke breaks future logins, duplicate username, short password — and critically, <strong>a Product A session requesting a real Product B project id gets 403</strong>, the core claim this whole phase rests on.</li>
+      <li><strong>Verified live against two real products on the real running Beacon instance</strong> (not just the fake stub): created "Marketing Site" and "Internal Dashboard" as real products, granted an agency login to only Marketing Site, logged into the real hosted <code>/embed/:productId</code> page, confirmed the dashboard showed only Marketing Site's real data — then, from that authenticated browser session, directly requested Internal Dashboard's real project id and confirmed a 403 and that it never appeared in the scoped project list. Also verified the actual <code>embed-snippet/beacon.html</code> file end to end via a real iframe embed.</li>
+    </ul>
+  </div>
+
+  <h2>Next</h2>
+  <table>
+    <tr><th>Phase</th><th>What</th></tr>
+    <tr><td>Dedicated instances</td><td>Provision a real new Beacon instance (needs a hosting-provider integration — none exists in either repo yet) + a genuinely separate Supabase project for its data.</td></tr>
+    <tr><td>Migration</td><td>Move a product's full data from a shared instance to a newly-provisioned dedicated one — a real, human-confirmed cutover, not automatic.</td></tr>
+  </table>
+
+  <footer>Beacon Manager Roadmap · companion document: <a href="PRD.html">PRD.html</a> · sibling project: Beacon (<code>apps-analytics-sdk</code>)</footer>
+</div>
+</body>
+</html>

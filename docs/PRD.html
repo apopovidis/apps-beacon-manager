@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Beacon Manager — PRD</title>
+<style>
+  :root{
+    --ink:#0b1210; --surface:#0f1a16; --surface2:#132420; --border:#1f3a32;
+    --text:#eef7f2; --muted:#9fb8ad; --accent:#7be6b0; --accent2:#d5ff52;
+    --good:#7be6b0; --bad:#e67b7b; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media(prefers-color-scheme:light){
+    :root{ --ink:#f7fbf9; --surface:#ffffff; --surface2:#f0f5f2; --border:#dbe6e0; --text:#0f1a16; --muted:#516a5f; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ink);color:var(--text);font:16px/1.6 Inter,system-ui,-apple-system,sans-serif;}
+  .wrap{max-width:980px;margin:0 auto;padding:56px 28px 120px}
+  .kicker{color:var(--accent);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.78rem}
+  h1{font-size:clamp(2rem,5vw,3rem);line-height:1.05;letter-spacing:-.02em;margin:14px 0 6px}
+  .subtitle{color:var(--muted);font-size:1.1rem;max-width:640px;margin:0 0 36px}
+  h2{font-size:1.5rem;margin:56px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+  h3{font-size:1.15rem;margin:28px 0 10px}
+  p{margin:0 0 14px}
+  ul,ol{margin:0 0 14px;padding-left:22px}
+  li{margin:4px 0}
+  code{font-family:var(--mono);background:var(--surface2);padding:2px 6px;border-radius:5px;font-size:.88em}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px}
+  .chip{border:1px solid var(--border);background:var(--surface);border-radius:99px;padding:5px 12px;font-size:.82rem;color:var(--muted)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px 24px;margin:16px 0}
+  table{width:100%;border-collapse:collapse;margin:18px 0;font-size:.92rem}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+  tr:last-child td{border-bottom:none}
+  .arch{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:4px;overflow-x:auto}
+  pre{margin:0;padding:20px;font-family:var(--mono);font-size:.82rem;line-height:1.55;color:var(--text);white-space:pre}
+  .note{border-left:3px solid var(--accent);padding:4px 0 4px 16px;color:var(--muted);font-size:.92rem;margin:16px 0}
+  footer{margin-top:80px;color:var(--muted);font-size:.82rem;border-top:1px solid var(--border);padding-top:18px}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">Internal tool · PRD</div>
+  <h1>Beacon Manager</h1>
+  <p class="subtitle">A central registry and control plane for every Beacon analytics deployment across every product — instances, products, and per-instance access, all in one place.</p>
+  <div class="meta">
+    <span class="chip">v1</span>
+    <span class="chip">Sibling to <code>apps-analytics-sdk</code> (Beacon itself)</span>
+  </div>
+
+  <h2>1. Why this exists</h2>
+  <p>Beacon started as one shared, multi-tenant deployment: one process, one database, every product a row. That's the right default and stays the default. But at real scale (20+ products, growing continuously), two things become true: some products eventually need real data isolation (their own dedicated instance, not just a row in the shared one), and someone needs one place to see and manage every instance that now exists — rather than bookmarking N separate dashboard URLs and N separate admin keys.</p>
+  <p>Beacon Manager is that one place. It is deliberately <em>not</em> a copy of any instance's analytics data — it holds a registry (which instances exist, which products live on which instance) and enough credentials to act on each instance's real admin API on your behalf.</p>
+
+  <h2>2. Architecture</h2>
+  <div class="arch"><pre>Manager DB (this repo's own Postgres)
+  instances  — id, kind (shared|dedicated), origin_url, encrypted scoped credential, status
+  products   — id, name, instance_id, remote_group_id (that instance's own project_groups.id)
+
+Each registered Beacon instance
+  — its own separate database, unrelated to Manager's
+  — Manager holds one scoped admin_users credential per instance it manages,
+    not the instance's master key</pre></div>
+
+  <h3>2.1 Registration &amp; credential minting</h3>
+  <p>Registering an instance takes a one-time bootstrap admin key for that instance. Manager uses it exactly once — to call that instance's own <code>POST /admin/admin-users</code> and mint a brand-new, scoped credential (<code>role: admin</code>, <code>authProvider: manager</code>). Manager stores <em>only</em> the newly-minted credential (AES-256-GCM encrypted under Manager's own key), and never persists or logs the bootstrap key. Every subsequent call to that instance uses the minted credential.</p>
+  <p>This makes Manager's access to any one instance independently revocable: removing an instance from Manager's registry deletes that one <code>admin_users</code> row on the target (best-effort — it still forgets the instance locally even if the target is unreachable), without touching the instance's own master key or any other credential.</p>
+
+  <h3>2.2 Products</h3>
+  <p>A "product" in Manager is a durable pointer: this name lives on this instance, as this group. Manager can create a product on a chosen instance directly (proxying that instance's own <code>POST /admin/products</code> — see Beacon's Phase 17), or adopt a product that already exists on an instance via <em>sync</em>, which reads that instance's project groups and tracks any marked <code>kind: 'product'</code>.</p>
+  <p>The cross-instance products view fans out live to each instance's real admin API for project counts and reachability — it never caches or duplicates analytics data.</p>
+
+  <h2>3. API surface (v1)</h2>
+  <div class="scroll" style="overflow-x:auto;border:1px solid var(--border);border-radius:12px">
+  <table style="margin:0">
+    <tr><th>Endpoint</th><th>Does</th></tr>
+    <tr><td><code>POST /admin/instances</code></td><td>Register an instance (mints the scoped credential, never stores the bootstrap key)</td></tr>
+    <tr><td><code>GET /admin/instances</code></td><td>List registered instances</td></tr>
+    <tr><td><code>POST /admin/instances/:id/check</code></td><td>Live health ping, updates status</td></tr>
+    <tr><td><code>DELETE /admin/instances/:id</code></td><td>Best-effort remote revoke + forget locally</td></tr>
+    <tr><td><code>POST /admin/instances/:id/sync-products</code></td><td>Adopt pre-existing <code>kind='product'</code> groups from that instance</td></tr>
+    <tr><td><code>GET /admin/products</code></td><td>Every tracked product, fanned out live for project counts + reachability</td></tr>
+    <tr><td><code>POST /admin/products</code></td><td>Create a product on a chosen instance, track it locally in one call</td></tr>
+    <tr><td><code>GET /admin/products/:id/projects</code></td><td>That product's platform projects, proxied from its instance</td></tr>
+    <tr><td><code>POST /admin/products/:id/projects/:projectId/rotate-key</code></td><td>Proxied key rotation</td></tr>
+    <tr><td><code>GET/POST /admin/products/:id/embed-credentials</code></td><td>List/create agency logins for that product's scoped <code>/beacon</code> dashboard</td></tr>
+    <tr><td><code>DELETE /admin/embed-credentials/:id</code></td><td>Revoke an embed login</td></tr>
+    <tr><td><code>POST /public/products/:id/embed-login</code></td><td>Public (no admin key) — username/password login, mints a 12h session token</td></tr>
+    <tr><td><code>GET /public/embed/*</code></td><td>Public, session-token gated — scoped project list + summary/events/web-analytics, each request re-verified against that session's product before proxying</td></tr>
+    <tr><td><code>GET /embed/:productId</code></td><td>The real, hosted, product-scoped dashboard page (login + views) — what a web app's own <code>/beacon</code> embeds</td></tr>
+  </table>
+  </div>
+
+  <h3>3.1 Why the enforcement lives on Manager, not in the embed page</h3>
+  <p>The embed page's browser-side code is not trusted for security — a determined visitor can read its JavaScript and craft arbitrary requests. The actual boundary is server-side, in Manager's <code>/public/embed/*</code> routes: every single request re-fetches that session's product's real, current project list from its Beacon instance and checks the requested project id against it before proxying anything. There is no cached or client-supplied "which product am I" — it is re-derived from the session token on every request. A session for Product A requesting Product B's real project id — even one it somehow learned — gets a 403, not a redacted response; verified directly against two real products on a real running Beacon instance, not just the fake test double.</p>
+
+  <h2>4. What's explicitly not built yet</h2>
+  <ul>
+    <li><strong>Dedicated-instance provisioning</strong> — Manager can register an already-running dedicated instance, but cannot yet stand one up itself (needs a hosting-provider integration; there is none in either repo today).</li>
+    <li><strong>Migration</strong> — moving a product's data from a shared instance to a newly-provisioned dedicated one. A real, human-confirmed cutover process, not automatic.</li>
+    <li><strong>Multi-user RBAC on Manager itself</strong> — v1 is single shared admin key, matching Beacon's own pre-RBAC starting point.</li>
+  </ul>
+  <p class="note">Each of the above is a real, separately-scoped phase — see ROADMAP.html.</p>
+
+  <footer>Beacon Manager PRD · v1 · companion document: <a href="ROADMAP.html">ROADMAP.html</a> · sibling project: Beacon (<code>apps-analytics-sdk</code>)</footer>
+</div>
+</body>
+</html>

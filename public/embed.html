@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Analytics</title>
+<style>
+  :root{
+    --ink:#0b1210; --surface:#0f1a16; --surface2:#132420; --border:#1f3a32;
+    --text:#eef7f2; --muted:#9fb8ad; --accent:#7be6b0;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media(prefers-color-scheme:light){
+    :root{ --ink:#f7fbf9; --surface:#ffffff; --surface2:#f0f5f2; --border:#dbe6e0; --text:#0f1a16; --muted:#516a5f; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ink);color:var(--text);font:14px/1.5 Inter,system-ui,-apple-system,sans-serif;}
+  button,input{font:inherit;color:inherit}
+  input{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;width:100%}
+  button{background:var(--accent);color:#08130f;border:0;border-radius:8px;padding:9px 14px;font-weight:700;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text);font-weight:600}
+  #gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  #gate .box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:320px}
+  #gate h1{font-size:1.15rem;margin:0 0 4px}
+  #gate .sub{color:var(--muted);font-size:.85rem;margin-bottom:18px}
+  #gate .field{margin-bottom:10px}
+  #gate .error{color:#e67b7b;font-size:.82rem;margin-top:8px;min-height:1em}
+  .hidden{display:none !important}
+  .wrap{max-width:960px;margin:0 auto;padding:24px 20px 60px}
+  .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+  .top h1{font-size:1.1rem;margin:0}
+  .layout{display:flex;gap:20px;align-items:flex-start}
+  .sidebar{width:220px;flex-shrink:0}
+  .sidebar .item{padding:9px 10px;border-radius:8px;cursor:pointer;font-size:.86rem;margin-bottom:2px}
+  .sidebar .item:hover{background:var(--surface2)}
+  .sidebar .item.active{background:var(--surface2);font-weight:600}
+  .main{flex:1;min-width:0}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px}
+  .card h3{margin:0 0 12px;font-size:.9rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+  .stat-tile{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+  .stat-tile .label{font-size:.68rem;color:var(--muted);text-transform:uppercase}
+  .stat-tile .value{font-size:1.2rem;font-weight:700;margin-top:2px}
+  table{width:100%;border-collapse:collapse;font-size:.82rem}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:.68rem}
+  code{font-family:var(--mono);background:var(--surface2);padding:2px 6px;border-radius:5px}
+  .empty{color:var(--muted);font-size:.85rem;padding:16px 0;text-align:center}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="box">
+    <h1 id="gateProductName">Analytics</h1>
+    <p class="sub">Sign in to view this product's analytics.</p>
+    <div class="field"><input id="username" placeholder="Username"></div>
+    <div class="field"><input id="password" type="password" placeholder="Password"></div>
+    <button id="loginBtn" style="width:100%">Sign in</button>
+    <div class="error" id="loginError"></div>
+  </div>
+</div>
+
+<div class="hidden" id="app">
+  <div class="wrap">
+    <div class="top">
+      <h1 id="productName">Analytics</h1>
+      <button type="button" class="ghost" id="logoutBtn">Sign out</button>
+    </div>
+    <div class="layout">
+      <div class="sidebar" id="projectList"></div>
+      <div class="main" id="detail"><div class="empty">Select a project.</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const productId = location.pathname.split("/").filter(Boolean).pop();
+const storageKey = `beacon_embed_session_${productId}`;
+let session = null;
+try { session = JSON.parse(localStorage.getItem(storageKey) || "null"); } catch {}
+
+function esc(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+async function api(path) {
+  const res = await fetch(`/public/embed${path}`, { headers: { Authorization: `Bearer ${session.token}` } });
+  if (res.status === 401) {
+    localStorage.removeItem(storageKey);
+    location.reload();
+    throw new Error("Session expired.");
+  }
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  return res.json();
+}
+
+function showApp() {
+  document.getElementById("gate").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  document.getElementById("productName").textContent = session.productName;
+  loadProjects();
+}
+
+document.getElementById("loginBtn").onclick = async () => {
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value;
+  const errorEl = document.getElementById("loginError");
+  errorEl.textContent = "";
+  if (!username || !password) { errorEl.textContent = "Enter a username and password."; return; }
+  try {
+    const res = await fetch(`/public/products/${productId}/embed-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    const body = await res.json();
+    if (!res.ok) { errorEl.textContent = body.error || "Sign-in failed."; return; }
+    session = body;
+    localStorage.setItem(storageKey, JSON.stringify(session));
+    showApp();
+  } catch (e) {
+    errorEl.textContent = e.message || "Sign-in failed.";
+  }
+};
+
+document.getElementById("logoutBtn").onclick = () => {
+  localStorage.removeItem(storageKey);
+  location.reload();
+};
+
+let projects = [];
+async function loadProjects() {
+  projects = await api("/projects");
+  const el = document.getElementById("projectList");
+  if (!projects.length) { el.innerHTML = `<div class="empty">No projects in this product yet.</div>`; return; }
+  el.innerHTML = projects.map((p) => `<div class="item" data-id="${p.id}">${esc(p.name)}</div>`).join("");
+  el.querySelectorAll(".item").forEach((item) => item.onclick = () => selectProject(item.dataset.id));
+  selectProject(projects[0].id);
+}
+
+async function selectProject(id) {
+  document.querySelectorAll(".sidebar .item").forEach((item) => item.classList.toggle("active", item.dataset.id === id));
+  const detail = document.getElementById("detail");
+  detail.innerHTML = `<div class="empty">Loading&hellip;</div>`;
+
+  const [summary, events, webAnalytics] = await Promise.all([
+    api(`/projects/${id}/summary`).catch(() => null),
+    api(`/projects/${id}/events?limit=25`).catch(() => []),
+    api(`/projects/${id}/web-analytics?days=30`).catch(() => null),
+  ]);
+
+  detail.innerHTML = `
+    <div class="card">
+      <h3>Last 30 days</h3>
+      <div class="stat-row">
+        <div class="stat-tile"><div class="label">Pageviews</div><div class="value">${webAnalytics?.pageviews ?? "—"}</div></div>
+        <div class="stat-tile"><div class="label">Visitors</div><div class="value">${webAnalytics?.uniqueVisitors ?? "—"}</div></div>
+        <div class="stat-tile"><div class="label">Bounce rate</div><div class="value">${webAnalytics ? Math.round(webAnalytics.bounceRate * 100) + "%" : "—"}</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Recent events</h3>
+      ${events.length ? `
+        <table><thead><tr><th>When</th><th>Event</th><th>Source</th></tr></thead>
+        <tbody>${events.map((e) => `<tr><td>${new Date(e.occurred_at).toLocaleString()}</td><td><code>${esc(e.event_name)}</code></td><td>${esc(e.source_key)}</td></tr>`).join("")}</tbody></table>
+      ` : `<div class="empty">No events yet.</div>`}
+    </div>
+  `;
+}
+
+if (session && session.token && new Date(session.expiresAt) > new Date()) {
+  showApp();
+} else {
+  localStorage.removeItem(storageKey);
+}
+</script>
+</body>
+</html>
