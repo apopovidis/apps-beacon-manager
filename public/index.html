@@ -23,10 +23,19 @@
   button{background:var(--accent);color:#08130f;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}
   button.ghost{background:transparent;border:1px solid var(--border);color:var(--text);font-weight:600}
   button.small{padding:5px 10px;font-size:.78rem}
-  .wrap{max-width:1100px;margin:0 auto;padding:32px 28px 80px}
+  .layout{display:flex;min-height:100vh}
+  .sidebar{width:280px;border-right:1px solid var(--border);padding:28px 24px;flex-shrink:0}
+  .main{flex:1;padding:32px 36px 80px;max-width:1200px}
   .brand{font-weight:800;font-size:1.3rem;letter-spacing:-.01em;margin-bottom:4px}
   .brand span{color:var(--accent)}
-  .sub{color:var(--muted);font-size:.85rem;margin-bottom:28px}
+  .sub{color:var(--muted);font-size:.85rem;margin-bottom:24px}
+  .side-nav-item{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:.86rem;font-weight:600;color:var(--muted)}
+  .side-nav-item:hover{background:var(--surface2);color:var(--text)}
+  .side-nav-item.active{background:var(--surface2);color:var(--text)}
+  figure{margin:0 0 20px}
+  figure svg{width:100%;height:auto;color:var(--text)}
+  figcaption{color:var(--muted);font-size:.85rem;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+  figcaption code{font-size:.9em}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:20px}
   .card h2{margin:0 0 4px;font-size:1.05rem}
   .card .hint{color:var(--muted);font-size:.82rem;margin-bottom:14px}
@@ -70,45 +79,55 @@
   </div>
 </div>
 
-<div class="hidden" id="app">
-  <div class="wrap">
+<div class="layout hidden" id="app">
+  <div class="sidebar">
     <div class="brand">Beacon Manager<span>.</span></div>
     <div class="sub">Central registry for every Beacon installation</div>
-
-    <div class="card">
-      <h2>Instances</h2>
-      <div class="hint">Every Beacon deployment this Manager knows about and can reach.</div>
-      <div id="instancesTable"></div>
-      <div style="height:14px"></div>
-      <form id="registerInstanceForm">
-        <div class="grid2">
-          <input id="instName" placeholder="Instance name (e.g. Shared prod)">
-          <input id="instOrigin" placeholder="Origin URL (e.g. http://localhost:4101)">
-        </div>
-        <div style="height:8px"></div>
-        <div class="grid2">
-          <select id="instKind">
-            <option value="shared">Shared</option>
-            <option value="dedicated">Dedicated</option>
-          </select>
-          <input id="instBootstrapKey" type="password" placeholder="Bootstrap admin key (used once, never stored)">
-        </div>
-        <div style="height:10px"></div>
-        <button type="submit">Register instance</button>
-      </form>
+    <div class="side-nav">
+      <div class="side-nav-item active" id="navDashboard">Dashboard</div>
+      <div class="side-nav-item" id="navHowItWorks">How it works</div>
     </div>
+  </div>
 
-    <div class="card">
-      <div class="row" style="justify-content:space-between">
-        <div>
-          <h2 style="margin:0">Products</h2>
-          <div class="hint" style="margin:0">Every product across every registered instance.</div>
-        </div>
-        <button type="button" id="newProductBtn" class="small">+ New product</button>
+  <div class="main">
+    <div id="dashboardView">
+      <div class="card">
+        <h2>Instances</h2>
+        <div class="hint">Every Beacon deployment this Manager knows about and can reach.</div>
+        <div id="instancesTable"></div>
+        <div style="height:14px"></div>
+        <form id="registerInstanceForm">
+          <div class="grid2">
+            <input id="instName" placeholder="Instance name (e.g. Shared prod)">
+            <input id="instOrigin" placeholder="Origin URL (e.g. http://localhost:4101)">
+          </div>
+          <div style="height:8px"></div>
+          <div class="grid2">
+            <select id="instKind">
+              <option value="shared">Shared</option>
+              <option value="dedicated">Dedicated</option>
+            </select>
+            <input id="instBootstrapKey" type="password" placeholder="Bootstrap admin key (used once, never stored)">
+          </div>
+          <div style="height:10px"></div>
+          <button type="submit">Register instance</button>
+        </form>
       </div>
-      <div style="height:14px"></div>
-      <div id="productsTable"></div>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <h2 style="margin:0">Products</h2>
+            <div class="hint" style="margin:0">Every product across every registered instance.</div>
+          </div>
+          <button type="button" id="newProductBtn" class="small">+ New product</button>
+        </div>
+        <div style="height:14px"></div>
+        <div id="productsTable"></div>
+      </div>
     </div>
+
+    <div id="howItWorksView" class="hidden"></div>
   </div>
 </div>
 
@@ -135,6 +154,156 @@ function showApp() {
   document.getElementById("gate").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   loadAll();
+}
+
+// --- Nav: Dashboard vs. How it works --------------------------------------
+
+function setActiveNav(id) {
+  document.querySelectorAll(".side-nav-item").forEach((el) => el.classList.remove("active"));
+  document.getElementById(id)?.classList.add("active");
+}
+
+document.getElementById("navDashboard").onclick = () => {
+  setActiveNav("navDashboard");
+  document.getElementById("dashboardView").classList.remove("hidden");
+  document.getElementById("howItWorksView").classList.add("hidden");
+};
+
+document.getElementById("navHowItWorks").onclick = () => {
+  setActiveNav("navHowItWorks");
+  document.getElementById("dashboardView").classList.add("hidden");
+  const view = document.getElementById("howItWorksView");
+  view.classList.remove("hidden");
+  if (!view.dataset.rendered) { renderHowItWorks(); view.dataset.rendered = "1"; }
+};
+
+// --- How it works: shared vs. dedicated instances, and how the embeddable
+// scoped dashboard re-verifies access on every request. --------------------
+
+function renderHowItWorks() {
+  const view = document.getElementById("howItWorksView");
+  view.innerHTML = `
+    <h2 style="margin:0 0 4px">How it works</h2>
+    <p class="muted" style="max-width:640px;margin-bottom:22px">Manager doesn't run analytics itself — it's a registry that fans out live to every Beacon instance it knows about, whether that instance is shared or dedicated.</p>
+
+    <div class="card">
+      <figure>
+        <svg viewBox="0 0 920 440" role="img" aria-label="Shared instance vs dedicated instance: same Beacon codebase, different compute and database footprint">
+          <defs>
+            <marker id="hiw-arrow1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <text x="230" y="24" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">Most products — shared instance</text>
+          <text x="690" y="24" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">A promoted product — dedicated</text>
+
+          <text x="230" y="48" text-anchor="middle" font-size="11" opacity="0.7" fill="currentColor">web / iOS / Android / server apps (SDK)</text>
+          <line x1="230" y1="54" x2="230" y2="78" stroke="currentColor" stroke-width="1.5" marker-end="url(#hiw-arrow1)"/>
+          <text x="238" y="68" font-size="10" opacity="0.7" fill="currentColor">apiKey + ingestUrl</text>
+
+          <rect x="60" y="80" width="340" height="64" rx="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="230" y="106" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Beacon service</text>
+          <text x="230" y="124" text-anchor="middle" font-size="11" opacity="0.7" fill="currentColor">Express — ingest + admin + dashboard</text>
+
+          <line x1="230" y1="144" x2="230" y2="178" stroke="currentColor" stroke-width="1.5" marker-end="url(#hiw-arrow1)"/>
+          <text x="238" y="165" font-size="10" opacity="0.7" fill="currentColor">queries, scoped by project_id</text>
+
+          <rect x="60" y="180" width="340" height="170" rx="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="230" y="204" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Shared Postgres</text>
+          <rect x="80" y="220" width="90" height="36" rx="6" fill="currentColor" opacity="0.12"/>
+          <text x="125" y="243" text-anchor="middle" font-size="11" fill="currentColor">Product A</text>
+          <rect x="185" y="220" width="90" height="36" rx="6" fill="currentColor" opacity="0.12"/>
+          <text x="230" y="243" text-anchor="middle" font-size="11" fill="currentColor">Product B</text>
+          <rect x="290" y="220" width="90" height="36" rx="6" fill="currentColor" opacity="0.12"/>
+          <text x="335" y="243" text-anchor="middle" font-size="11" fill="currentColor">Product C</text>
+          <text x="230" y="285" text-anchor="middle" font-size="10" opacity="0.6" fill="currentColor">every row tagged project_id / group_id</text>
+          <text x="230" y="305" text-anchor="middle" font-size="10" opacity="0.6" fill="currentColor">one connection pool, one process</text>
+
+          <text x="690" y="48" text-anchor="middle" font-size="11" opacity="0.7" fill="currentColor">that product's apps (SDK)</text>
+          <line x1="690" y1="54" x2="690" y2="78" stroke="currentColor" stroke-width="1.5" marker-end="url(#hiw-arrow1)"/>
+          <text x="698" y="68" font-size="10" opacity="0.7" fill="currentColor">apiKey + ingestUrl</text>
+
+          <rect x="520" y="80" width="340" height="64" rx="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="690" y="106" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Beacon service</text>
+          <text x="690" y="124" text-anchor="middle" font-size="11" opacity="0.7" fill="currentColor">same codebase — separate deployment</text>
+
+          <line x1="690" y1="144" x2="690" y2="178" stroke="currentColor" stroke-width="1.5" marker-end="url(#hiw-arrow1)"/>
+          <text x="698" y="165" font-size="10" opacity="0.7" fill="currentColor">queries</text>
+
+          <rect x="520" y="180" width="340" height="170" rx="10" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="690" y="204" text-anchor="middle" font-size="13" font-weight="600" fill="var(--accent)">Dedicated Postgres</text>
+          <rect x="645" y="220" width="90" height="36" rx="6" fill="var(--accent)" opacity="0.18"/>
+          <text x="690" y="243" text-anchor="middle" font-size="11" fill="currentColor">Product D</text>
+          <text x="690" y="285" text-anchor="middle" font-size="10" opacity="0.6" fill="currentColor">its own connection pool, own storage</text>
+          <text x="690" y="305" text-anchor="middle" font-size="10" opacity="0.6" fill="currentColor">no other product's rows ever pass through</text>
+
+          <line x1="440" y1="380" x2="440" y2="410" stroke="currentColor" stroke-width="1" stroke-dasharray="4 4" opacity="0.4"/>
+          <text x="460" y="400" font-size="11" opacity="0.7" fill="currentColor">no shared connection between the two</text>
+        </svg>
+        <figcaption><strong>Same code, different footprint.</strong> Every Beacon deployment runs the identical codebase. Most products share one instance and one database — isolated only by <code>project_id</code>, cheap to run. A product that outgrows the shared pool (traffic, storage, noisy-neighbor query load) gets promoted: its own Beacon process, its own database, registered here as a second instance.</figcaption>
+      </figure>
+    </div>
+
+    <div class="card">
+      <figure>
+        <svg viewBox="0 0 920 500" role="img" aria-label="Beacon Manager registers every instance with a scoped credential and fans out live; the embeddable agency dashboard re-verifies product ownership on every request">
+          <defs>
+            <marker id="hiw-arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect x="40" y="30" width="320" height="70" rx="10" fill="none" stroke="var(--accent)" stroke-width="2"/>
+          <text x="200" y="58" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">Beacon Manager (here)</text>
+          <text x="200" y="76" text-anchor="middle" font-size="11" opacity="0.7" fill="currentColor">registry only — no analytics data</text>
+
+          <line x1="200" y1="100" x2="200" y2="126" stroke="currentColor" stroke-width="1.5" marker-end="url(#hiw-arrow2)"/>
+          <rect x="40" y="128" width="320" height="40" rx="8" fill="currentColor" opacity="0.08"/>
+          <text x="200" y="153" text-anchor="middle" font-size="10.5" opacity="0.75" fill="currentColor">instances · products · embed credentials</text>
+
+          <line x1="360" y1="55" x2="560" y2="55" stroke="currentColor" stroke-width="1.5" marker-end="url(#hiw-arrow2)"/>
+          <text x="460" y="42" text-anchor="middle" font-size="10" fill="currentColor">scoped credential</text>
+          <text x="460" y="72" text-anchor="middle" font-size="9.5" opacity="0.6" fill="currentColor">(auth_provider=manager, not the master key)</text>
+          <line x1="360" y1="65" x2="740" y2="65" stroke="currentColor" stroke-width="1.5" marker-end="url(#hiw-arrow2)"/>
+
+          <rect x="565" y="25" width="180" height="56" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="655" y="49" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">Shared instance</text>
+          <text x="655" y="66" text-anchor="middle" font-size="10" opacity="0.6" fill="currentColor">many products</text>
+
+          <rect x="745" y="25" width="150" height="56" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="820" y="49" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">Dedicated instance</text>
+          <text x="820" y="66" text-anchor="middle" font-size="10" opacity="0.6" fill="currentColor">one product</text>
+
+          <rect x="40" y="210" width="200" height="50" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="140" y="240" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">Agency browser</text>
+
+          <line x1="140" y1="260" x2="140" y2="288" stroke="currentColor" stroke-width="1.5" marker-end="url(#hiw-arrow2)"/>
+          <text x="150" y="278" font-size="10" opacity="0.7" fill="currentColor">username + password</text>
+          <text x="150" y="290" font-size="9.5" opacity="0.55" fill="currentColor">(product-scoped — not an admin key)</text>
+
+          <rect x="40" y="300" width="300" height="56" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="190" y="323" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">GET /embed/:productId</text>
+          <text x="190" y="340" text-anchor="middle" font-size="10" opacity="0.6" fill="currentColor">Manager-hosted login + dashboard page</text>
+
+          <line x1="190" y1="356" x2="190" y2="384" stroke="currentColor" stroke-width="1.5" marker-end="url(#hiw-arrow2)"/>
+          <text x="200" y="374" font-size="10" opacity="0.7" fill="currentColor">session token</text>
+
+          <rect x="40" y="394" width="380" height="70" rx="10" fill="var(--accent)" fill-opacity="0.08" stroke="var(--accent)" stroke-width="2"/>
+          <text x="230" y="420" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent)">/public/embed/* re-checks scope</text>
+          <text x="230" y="438" text-anchor="middle" font-size="10.5" opacity="0.8" fill="currentColor">project &#8712; this session's product — on every request,</text>
+          <text x="230" y="453" text-anchor="middle" font-size="10.5" opacity="0.8" fill="currentColor">not just once at login</text>
+
+          <line x1="420" y1="430" x2="560" y2="430" stroke="currentColor" stroke-width="1.5" marker-end="url(#hiw-arrow2)"/>
+          <text x="490" y="418" text-anchor="middle" font-size="10" opacity="0.7" fill="currentColor">proxies</text>
+          <text x="620" y="434" font-size="10.5" opacity="0.75" fill="currentColor">whichever instance</text>
+          <text x="620" y="448" font-size="10.5" opacity="0.75" fill="currentColor">hosts that product right now</text>
+          <line x1="700" y1="425" x2="655" y2="90" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
+          <line x1="700" y1="425" x2="820" y2="90" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
+        </svg>
+        <figcaption><strong>Manager never trusts a login once and forgets it.</strong> Registering an instance mints a scoped credential (never that instance's master key), so access is independently revocable — see "Remove" on the Dashboard tab. An agency's product-scoped session (created via "Embed access" on a product) gets re-checked against that product's live project list on every single request the embed dashboard makes — not just at login — so a session for one product can never be replayed against another's data, even if the underlying instance later changes.</figcaption>
+      </figure>
+    </div>
+  `;
 }
 
 document.getElementById("adminKeySubmit").onclick = async () => {
