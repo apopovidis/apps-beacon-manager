@@ -184,7 +184,7 @@ function renderHowItWorks() {
   const view = document.getElementById("howItWorksView");
   view.innerHTML = `
     <h2 style="margin:0 0 4px">How it works</h2>
-    <p class="muted" style="max-width:640px;margin-bottom:22px">Manager doesn't run analytics itself — it's a registry that fans out live to every Beacon instance it knows about, whether that instance is shared or dedicated.</p>
+    <p class="muted" style="max-width:640px;margin-bottom:22px">Manager doesn't run analytics itself — it's a registry that fans out live to every Beacon instance it knows about: as many shared instances and as many dedicated instances as you register, each one just another row.</p>
 
     <div class="card">
       <figure>
@@ -240,7 +240,7 @@ function renderHowItWorks() {
           <line x1="440" y1="380" x2="440" y2="410" stroke="currentColor" stroke-width="1" stroke-dasharray="4 4" opacity="0.4"/>
           <text x="460" y="400" font-size="11" opacity="0.7" fill="currentColor">no shared connection between the two</text>
         </svg>
-        <figcaption><strong>Same code, different footprint.</strong> Every Beacon deployment runs the identical codebase. Most products share one instance and one database — isolated only by <code>project_id</code>, cheap to run. A product that outgrows the shared pool (traffic, storage, noisy-neighbor query load) gets promoted: its own Beacon process, its own database, registered here as a second instance.</figcaption>
+        <figcaption><strong>Same code, different footprint.</strong> Every Beacon deployment runs the identical codebase. Most products share one instance and one database — isolated only by <code>project_id</code>, cheap to run. A product that outgrows the shared pool (traffic, storage, noisy-neighbor query load) gets promoted: its own Beacon process, its own database, registered here as a second instance. There's no limit on how many of either kind you register — additional shared instances (e.g. one per region) and additional dedicated instances each show up here as their own row, checked and synced independently.</figcaption>
       </figure>
     </div>
 
@@ -266,13 +266,19 @@ function renderHowItWorks() {
           <text x="460" y="72" text-anchor="middle" font-size="9.5" opacity="0.6" fill="currentColor">(auth_provider=manager, not the master key)</text>
           <line x1="360" y1="65" x2="740" y2="65" stroke="currentColor" stroke-width="1.5" marker-end="url(#hiw-arrow2)"/>
 
-          <rect x="565" y="25" width="180" height="56" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
-          <text x="655" y="49" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">Shared instance</text>
-          <text x="655" y="66" text-anchor="middle" font-size="10" opacity="0.6" fill="currentColor">many products</text>
+          <!-- Shared instances: any number can be registered — stacked cards signal "one or more" -->
+          <rect x="570" y="32" width="150" height="56" rx="8" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.35"/>
+          <rect x="565" y="27" width="150" height="56" rx="8" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6"/>
+          <rect x="560" y="22" width="150" height="56" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="635" y="47" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">Shared instances</text>
+          <text x="635" y="64" text-anchor="middle" font-size="10" opacity="0.6" fill="currentColor">any number, many products</text>
 
-          <rect x="745" y="25" width="150" height="56" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
-          <text x="820" y="49" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">Dedicated instance</text>
-          <text x="820" y="66" text-anchor="middle" font-size="10" opacity="0.6" fill="currentColor">one product</text>
+          <!-- Dedicated instances: also any number, one product each -->
+          <rect x="750" y="32" width="155" height="56" rx="8" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.35"/>
+          <rect x="745" y="27" width="155" height="56" rx="8" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6"/>
+          <rect x="740" y="22" width="155" height="56" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="817" y="47" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">Dedicated instances</text>
+          <text x="817" y="64" text-anchor="middle" font-size="10" opacity="0.6" fill="currentColor">any number, one product each</text>
 
           <rect x="40" y="210" width="200" height="50" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
           <text x="140" y="240" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">Agency browser</text>
@@ -297,10 +303,10 @@ function renderHowItWorks() {
           <text x="490" y="418" text-anchor="middle" font-size="10" opacity="0.7" fill="currentColor">proxies</text>
           <text x="620" y="434" font-size="10.5" opacity="0.75" fill="currentColor">whichever instance</text>
           <text x="620" y="448" font-size="10.5" opacity="0.75" fill="currentColor">hosts that product right now</text>
-          <line x1="700" y1="425" x2="655" y2="90" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
-          <line x1="700" y1="425" x2="820" y2="90" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
+          <line x1="700" y1="425" x2="635" y2="96" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
+          <line x1="700" y1="425" x2="817" y2="96" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
         </svg>
-        <figcaption><strong>Manager never trusts a login once and forgets it.</strong> Registering an instance mints a scoped credential (never that instance's master key), so access is independently revocable — see "Remove" on the Dashboard tab. An agency's product-scoped session (created via "Embed access" on a product) gets re-checked against that product's live project list on every single request the embed dashboard makes — not just at login — so a session for one product can never be replayed against another's data, even if the underlying instance later changes.</figcaption>
+        <figcaption><strong>Manager never trusts a login once and forgets it.</strong> Register as many shared and dedicated instances as you want — Manager treats each one identically, whether it's the first or the fifth. Registering an instance mints a scoped credential (never that instance's master key), so access is independently revocable — see "Remove" on the Dashboard tab. An agency's product-scoped session (created via "Embed access" on a product) gets re-checked against that product's live project list on every single request the embed dashboard makes — not just at login — so a session for one product can never be replayed against another's data, even if the underlying instance later changes.</figcaption>
       </figure>
     </div>
   `;

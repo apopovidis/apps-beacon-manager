@@ -70,6 +70,17 @@
     </ul>
   </div>
 
+  <h2>Phase 3 — "How it works" diagrams: any number of shared/dedicated instances</h2>
+  <p>User question worth confirming in code, not just answering from memory: can this registry hold more than one shared instance, and more than one dedicated instance? Checked <code>src/db/schema.sql</code> (<code>instances.origin_url</code> is the only unique constraint; <code>kind</code> just check-constrains the two allowed values, no count limit) and the <code>POST /admin/instances</code> handler (no kind-based gating) — confirmed directly against the local dev database by inserting 2 extra <code>shared</code> rows and 1 extra <code>dedicated</code> row in a transaction, verifying all 5 coexisted with zero constraint violations, then rolling back. No code change was needed for the capability itself — it already worked, and the "Instances" table/form already lists and accepts any number of either kind. What needed fixing was this page's own "How it works" diagram, which visually depicted exactly one shared instance and one dedicated instance, implying a 1-and-1 topology that was never actually the limit.</p>
+  <div class="phase">
+    <div class="phase-head"><span class="badge now">Now</span><span class="badge status">Phase 3</span></div>
+    <ul>
+      <li><strong>Figure 2's registry fan-out diagram</strong> redrawn: the single "Shared instance" and "Dedicated instance" boxes became 3-layer stacked-card visuals labeled "Shared instances" / "Dedicated instances" (plural), signaling "any number" at a glance. Same fix mirrored in the sibling <code>apps-analytics-sdk</code> dashboard's copy of this diagram.</li>
+      <li>Figure 1 and the page's intro paragraph got explicit text updates ("as many shared instances and as many dedicated instances as you register") since Figure 1's box-comparison layout is a representative single-example illustration by design and didn't need restructuring.</li>
+      <li>Verified live: reloaded the page, confirmed every relabeled text element's <code>getComputedTextLength()</code> stays within its box width (widest: 147px text in a 155px box), and confirmed the dashed pointer lines and Manager's fan-out arrows still land correctly on the new box positions.</li>
+    </ul>
+  </div>
+
   <h2>Next</h2>
   <table>
     <tr><th>Phase</th><th>What</th></tr>
