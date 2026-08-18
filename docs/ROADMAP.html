@@ -81,6 +81,18 @@
     </ul>
   </div>
 
+  <h2>Phase 4 — Products grouped by instance, with real per-app management</h2>
+  <p>Follow-up to the previous phase's answer: once it's confirmed you can register many shared and many dedicated instances, the next real question is how to actually manage products <em>on</em> a given one. The old Products card was a single flat table across every instance — workable at 2 instances, not at 10. Also found while wiring this up: <code>POST /products/:id/projects/:projectId/rotate-key</code> and <code>GET /products/:id/projects</code> already existed server-side (added alongside embed access in an earlier phase) but were never called from the UI — dead capability, not a dead endpoint.</p>
+  <div class="phase">
+    <div class="phase-head"><span class="badge now">Now</span><span class="badge status">Phase 4</span></div>
+    <ul>
+      <li><strong>Products card split into one card per instance</strong> — each shows that instance's name, kind and status badges, and origin URL as its own header, with only that instance's products listed underneath (no new API: <code>GET /admin/products</code> already returned <code>instance_id</code> per row, this was a frontend grouping change).</li>
+      <li><strong>"+ New product" moved onto each instance's card</strong> and now pre-selects that instance in the creation modal's dropdown, instead of one global button with no context on where the click came from.</li>
+      <li><strong>New "View apps" modal per product</strong> — lists the product's actual underlying projects (name, tier, API key) by finally wiring up the existing <code>GET /products/:id/projects</code> proxy, with a <strong>Copy</strong> button and a <strong>Rotate key</strong> button that calls the existing <code>POST .../rotate-key</code> proxy and refreshes the row in place.</li>
+      <li>Verified live end to end (via direct function calls, since headless click delivery was flaky in this environment for modal-triggering buttons specifically): created a real product pre-selected onto "Local shared instance," opened its apps list, rotated its key and confirmed the value actually changed, exercised the Copy button, and confirmed the unreachable-instance case (Railway, asleep) renders a clean inline error instead of a stuck loading state. Cleaned up the test product afterward via Beacon's own delete endpoints plus a direct row delete in Manager's <code>products</code> table (no delete-product endpoint exists in Manager itself yet).</li>
+    </ul>
+  </div>
+
   <h2>Next</h2>
   <table>
     <tr><th>Phase</th><th>What</th></tr>

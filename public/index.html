@@ -114,17 +114,7 @@
         </form>
       </div>
 
-      <div class="card">
-        <div class="row" style="justify-content:space-between">
-          <div>
-            <h2 style="margin:0">Products</h2>
-            <div class="hint" style="margin:0">Every product across every registered instance.</div>
-          </div>
-          <button type="button" id="newProductBtn" class="small">+ New product</button>
-        </div>
-        <div style="height:14px"></div>
-        <div id="productsTable"></div>
-      </div>
+      <div id="productsByInstance"></div>
     </div>
 
     <div id="howItWorksView" class="hidden"></div>
@@ -332,7 +322,7 @@ if (state.adminKey) showApp();
 async function loadAll() {
   [state.instances, state.products] = await Promise.all([api("/admin/instances"), api("/admin/products")]);
   renderInstances();
-  renderProducts();
+  renderProductsByInstance();
 }
 
 function renderInstances() {
@@ -374,21 +364,106 @@ function renderInstances() {
   });
 }
 
-function renderProducts() {
-  const el = document.getElementById("productsTable");
-  if (!state.products.length) { el.innerHTML = `<div class="empty">No products tracked yet.</div>`; return; }
-  el.innerHTML = `
-    <table><thead><tr><th>Product</th><th>Instance</th><th>Projects</th><th></th></tr></thead>
-    <tbody>${state.products.map((p) => `
-      <tr>
-        <td>${esc(p.name)}</td>
-        <td>${esc(p.instance_name)} <span class="badge ${p.instance_status}" style="margin-left:4px">${p.instance_status}</span></td>
-        <td>${p.reachable ? p.projectCount : `<span class="muted">unreachable</span>`}</td>
-        <td><button type="button" class="ghost small" data-access="${p.id}">Embed access</button></td>
-      </tr>
-    `).join("")}</tbody></table>
+// Products, grouped by the instance they live on — so managing "all
+// products on this shared instance" or "this dedicated one" is one card,
+// not a scan across a flat cross-instance table.
+function renderProductsByInstance() {
+  const container = document.getElementById("productsByInstance");
+  if (!state.instances.length) {
+    container.innerHTML = `<div class="card"><div class="empty">Register an instance above to start creating products.</div></div>`;
+    return;
+  }
+
+  container.innerHTML = state.instances.map((inst) => {
+    const products = state.products.filter((p) => p.instance_id === inst.id);
+    return `
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <div>
+            <h2 style="margin:0">${esc(inst.name)} <span class="badge ${inst.kind}" style="margin-left:6px">${inst.kind}</span> <span class="badge ${inst.status}" style="margin-left:4px">${inst.status}</span></h2>
+            <div class="hint" style="margin:4px 0 0"><code>${esc(inst.origin_url)}</code></div>
+          </div>
+          <button type="button" class="small" data-new-product="${inst.id}">+ New product</button>
+        </div>
+        <div style="height:14px"></div>
+        ${products.length ? `
+          <table><thead><tr><th>Product</th><th>Apps</th><th></th></tr></thead>
+          <tbody>${products.map((p) => `
+            <tr>
+              <td>${esc(p.name)}</td>
+              <td>${p.reachable ? p.projectCount : `<span class="muted">unreachable</span>`}</td>
+              <td class="row">
+                <button type="button" class="ghost small" data-view-apps="${p.id}">View apps</button>
+                <button type="button" class="ghost small" data-access="${p.id}">Embed access</button>
+              </td>
+            </tr>
+          `).join("")}</tbody></table>
+        ` : `<div class="empty">No products yet on this instance.</div>`}
+      </div>
+    `;
+  }).join("");
+
+  container.querySelectorAll("[data-new-product]").forEach((btn) => btn.onclick = () => openNewProductModal(btn.dataset.newProduct));
+  container.querySelectorAll("[data-view-apps]").forEach((btn) => btn.onclick = () => openViewAppsModal(btn.dataset.viewApps));
+  container.querySelectorAll("[data-access]").forEach((btn) => btn.onclick = () => openEmbedAccessModal(btn.dataset.access));
+}
+
+// --- View apps modal: a product's actual projects on its instance, with
+// key rotation — proxies Beacon's own POST /projects/:id/rotate-key. -------
+
+async function openViewAppsModal(productId) {
+  const product = state.products.find((p) => p.id === productId);
+  const backdrop = document.getElementById("productModalBackdrop");
+  const modal = document.getElementById("productModal");
+  modal.innerHTML = `<h2>Apps — ${esc(product.name)}</h2><p class="muted">Loading&hellip;</p>`;
+  backdrop.classList.remove("hidden");
+
+  try {
+    const projects = await api(`/admin/products/${productId}/projects`);
+    renderAppsList(product, projects);
+  } catch (e) {
+    modal.innerHTML = `<h2>Apps — ${esc(product.name)}</h2><p class="muted">Couldn't load: ${esc(e.message || e)}</p><div class="modal-actions"><button type="button" class="ghost" id="appsDone">Close</button></div>`;
+    modal.querySelector("#appsDone").onclick = () => backdrop.classList.add("hidden");
+  }
+}
+
+function renderAppsList(product, projects) {
+  const modal = document.getElementById("productModal");
+  modal.innerHTML = `
+    <h2>Apps — ${esc(product.name)}</h2>
+    <p class="muted" style="margin-bottom:14px">On ${esc(product.instance_name)}. Rotating a key invalidates the old one immediately — update that app's SDK config right after.</p>
+    ${projects.length ? `
+      <table><thead><tr><th>App</th><th>Tier</th><th>API key</th><th></th></tr></thead>
+      <tbody>${projects.map((p) => `
+        <tr>
+          <td>${esc(p.name)}</td>
+          <td><span class="badge">${esc(p.tier)}</span></td>
+          <td><code>${esc(p.api_key)}</code></td>
+          <td class="row">
+            <button type="button" class="ghost small" data-copy-key="${esc(p.api_key)}">Copy</button>
+            <button type="button" class="ghost small" data-rotate="${p.id}">Rotate key</button>
+          </td>
+        </tr>
+      `).join("")}</tbody></table>
+    ` : `<div class="empty">No apps on this product yet — drag existing projects onto it from Beacon's own dashboard.</div>`}
+    <div class="modal-actions"><button type="button" class="ghost" id="appsDone">Close</button></div>
   `;
-  el.querySelectorAll("[data-access]").forEach((btn) => btn.onclick = () => openEmbedAccessModal(btn.dataset.access));
+  modal.querySelectorAll("[data-copy-key]").forEach((btn) => btn.onclick = (e) => {
+    navigator.clipboard.writeText(btn.dataset.copyKey);
+    e.target.textContent = "Copied!";
+    setTimeout(() => { e.target.textContent = "Copy"; }, 1500);
+  });
+  modal.querySelectorAll("[data-rotate]").forEach((btn) => btn.onclick = async () => {
+    if (!confirm("Rotate this app's key? The old key stops working immediately.")) return;
+    try {
+      await api(`/admin/products/${product.id}/projects/${btn.dataset.rotate}/rotate-key`, { method: "POST" });
+      const refreshed = await api(`/admin/products/${product.id}/projects`);
+      renderAppsList(product, refreshed);
+    } catch (e2) {
+      alert("Couldn't rotate key: " + (e2.message || e2));
+    }
+  });
+  modal.querySelector("#appsDone").onclick = () => document.getElementById("productModalBackdrop").classList.add("hidden");
 }
 
 // --- Embed access modal: agency logins for the product-scoped /beacon UI --
@@ -483,7 +558,7 @@ function wirePlatformRow(row) {
   };
 }
 
-document.getElementById("newProductBtn").onclick = () => {
+function openNewProductModal(preselectInstanceId) {
   if (!state.instances.length) return alert("Register an instance first.");
   const backdrop = document.getElementById("productModalBackdrop");
   const modal = document.getElementById("productModal");
@@ -491,7 +566,7 @@ document.getElementById("newProductBtn").onclick = () => {
     <h2>New product</h2>
     <p class="muted" style="margin-bottom:14px">Creates a product on the instance you choose, plus one project per platform.</p>
     <select id="productInstance" style="margin-bottom:10px">
-      ${state.instances.map((i) => `<option value="${i.id}">${esc(i.name)} (${esc(i.origin_url)})</option>`).join("")}
+      ${state.instances.map((i) => `<option value="${i.id}" ${i.id === preselectInstanceId ? "selected" : ""}>${esc(i.name)} (${esc(i.origin_url)})</option>`).join("")}
     </select>
     <input id="productName" placeholder="Product name (e.g. Acme Marketing Site)" style="margin-bottom:14px">
     <div id="platformRows"></div>
@@ -511,7 +586,7 @@ document.getElementById("newProductBtn").onclick = () => {
   modal.querySelector("#productCancel").onclick = () => backdrop.classList.add("hidden");
   modal.querySelector("#productSubmit").onclick = submitNewProduct;
   backdrop.classList.remove("hidden");
-};
+}
 
 function sdkSnippet(project, platform, originUrl) {
   if (platform === "web") {
