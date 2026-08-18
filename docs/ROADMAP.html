@@ -93,6 +93,16 @@
     </ul>
   </div>
 
+  <h2>Phase 5 — "Open dashboard" links out to each instance</h2>
+  <p>Real usability gap: Manager could show status, health, and a product/app browser per instance, but there was no way to actually get <em>into</em> that instance's own dashboard (funnels, flags, experiments, everything Manager deliberately doesn't duplicate) — you had to already know or go dig up its URL separately. Considered also letting Manager reveal/copy the scoped admin credential it holds per instance as a one-click login, but that credential is currently never exposed outside the server by design (the registration form's own copy says the bootstrap key is "used once, never stored") — decided against changing that posture for this; you log in with a key you already have.</p>
+  <div class="phase">
+    <div class="phase-head"><span class="badge now">Now</span><span class="badge status">Phase 5</span></div>
+    <ul>
+      <li><strong>"Open" / "Open dashboard" links</strong> — a real <code>&lt;a href="{origin_url}" target="_blank"&gt;</code>, not a button, in both the Instances table's action column and each per-instance Products card header. No new backend, no new state — <code>origin_url</code> was already in <code>state.instances</code>.</li>
+      <li>Verified live: both links' <code>href</code> resolve to the correct instance (checked via the accessibility tree, not just visually) — the local shared instance's link points at <code>localhost:4101</code>, Railway's at its real production URL.</li>
+    </ul>
+  </div>
+
   <h2>Next</h2>
   <table>
     <tr><th>Phase</th><th>What</th></tr>
